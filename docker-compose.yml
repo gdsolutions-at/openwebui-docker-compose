@@ -1,32 +1,49 @@
+# Docker Compose file for Traefik and OpenWebUI
+# Version: 1.0
+# Author: Michael Gürtl-Dusleag
+# Description: Sets up Traefik as a reverse proxy with Let's Encrypt
+#              and OpenWebUI service.
+
 services:
   traefik:
-    image: traefik:latest
+    image: traefik:v3.0
     container_name: traefik
     command:
       - --api.dashboard=true
       - --api.insecure=true
-      - --log.level=INFO
+
+      - --log.level=DEBUG
       - --accesslog=true
-      - --providers.docker.network=openwebui
-      - --providers.docker.exposedByDefault=false
+
+      - --providers.docker.network=traefik-network
+      - --providers.docker.exposedByDefault=false # Good security practice
+
+      # --- Entrypoints ---
+      # HTTP Entrypoint
       - --entrypoints.web.address=:80
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # Global HTTP to HTTPS redirection
+      #- --entrypoints.web.http.redirections.entrypoint.to=websecure
+      #- --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # HTTPS Entrypoint
       - --entrypoints.websecure.address=:443
+
       - --entrypoints.websecure.http.tls.certresolver=letsencrypt
       - --certificatesresolvers.letsencrypt.acme.email=admin@jesterbox.org
-      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+
+      #- --entrypoints.web.forwardedHeaders.trustedIPs=10.0.0.0/8
+      #- --entrypoints.websecure.forwardedHeaders.trustedIPs=10.0.0.0/8
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt:/letsencrypt
     networks:
-      - openwebui
-    labels:
-      - traefik.enable=true
+      - traefik-network
 
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
@@ -34,29 +51,49 @@ services:
     environment:
       - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
     volumes:
-      - openwebui-data:/app/data
+      - openwebui-data:/app/backend/data
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.llm-http.rule=Host(`llm.gdsolutions.at`)"
-      - "traefik.http.routers.llm-http.entrypoints=web"
-      - "traefik.http.routers.llm-http.middlewares=llm-redirect"
+      - "traefik.enable=true" # Enable Traefik for this service
 
-      - "traefik.http.routers.llm-https.rule=Host(`llm.gdsolutions.at`)"
-      - "traefik.http.routers.llm-https.entrypoints=websecure"
-      - "traefik.http.routers.llm-https.tls.certresolver=letsencrypt"
-      - "traefik.http.services.llm-https.loadbalancer.server.port=8080"
+      # --- Service Definition for OpenWebUI ---
+      - "traefik.http.services.openwebui-svc.loadbalancer.server.port=8080"
 
-      - "traefik.http.middlewares.llm-redirect.redirectScheme.scheme=https"
+      # Redirect middleware definition
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+      # --- HTTP Router (for llm.gdsolutions.at) with redirect---
+      # This router will match HTTP requests and then be redirected to HTTPS
+      # by Traefik's global entrypoint redirection.
+      - "traefik.http.routers.openwebui-http.rule=Host(`llm.gdsolutions.at`)"
+      - "traefik.http.routers.openwebui-http.entrypoints=web"
+      - "traefik.http.routers.openwebui-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.openwebui-http.service=openwebui-svc" 
+
+      # --- HTTP Router for internal address(for mac-mini.jesterbox.lan) ---
+      - "traefik.http.routers.openwebui-internal.rule=Host(`mac-mini.jesterbox.lan`)"
+      - "traefik.http.routers.openwebui-internal.entrypoints=web"
+      - "traefik.http.routers.openwebui-internal.service=openwebui-svc" # Link to the backend service
+
+      # --- HTTPS Router (for llm.gdsolutions.at) ---
+      - "traefik.http.routers.openwebui-https.rule=Host(`llm.gdsolutions.at`)"
+      - "traefik.http.routers.openwebui-https.entrypoints=websecure"
+      - "traefik.http.routers.openwebui-https.tls.certresolver=letsencrypt" # Use Let's Encrypt
+      - "traefik.http.routers.openwebui-https.service=openwebui-svc" # Link to the backend service
+
+
     restart: unless-stopped
     depends_on:
       - traefik
     networks:
-      - openwebui
+      - traefik-network
 
+# Define the external network (must be created manually: docker network create traefik-network)
 networks:
-  openwebui:
-    driver: bridge
+  traefik-network:
+    external: true
 
+# Define the volume for OpenWebUI data
 volumes:
   openwebui-data:
-    driver: local
+    driver: local # Or specify another driver if needed
+
