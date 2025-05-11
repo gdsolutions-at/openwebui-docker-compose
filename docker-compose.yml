@@ -1,0 +1,62 @@
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --log.level=INFO
+      - --accesslog=true
+      - --providers.docker.network=openwebui
+      - --providers.docker.exposedByDefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls.certresolver=letsencrypt
+      - --certificatesresolvers.letsencrypt.acme.email=admin@jesterbox.org
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - openwebui
+    labels:
+      - traefik.enable=true
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    environment:
+      - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - openwebui-data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.llm-http.rule=Host(`llm.gdsolutions.at`)"
+      - "traefik.http.routers.llm-http.entrypoints=web"
+      - "traefik.http.routers.llm-http.middlewares=llm-redirect"
+
+      - "traefik.http.routers.llm-https.rule=Host(`llm.gdsolutions.at`)"
+      - "traefik.http.routers.llm-https.entrypoints=websecure"
+      - "traefik.http.routers.llm-https.tls.certresolver=letsencrypt"
+      - "traefik.http.services.llm-https.loadbalancer.server.port=8080"
+
+      - "traefik.http.middlewares.llm-redirect.redirectScheme.scheme=https"
+    restart: unless-stopped
+    depends_on:
+      - traefik
+    networks:
+      - openwebui
+
+networks:
+  openwebui:
+    driver: bridge
+
+volumes:
+  openwebui-data:
+    driver: local
