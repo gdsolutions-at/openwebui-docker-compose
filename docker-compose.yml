@@ -21,9 +21,7 @@ services:
       # --- Entrypoints ---
       # HTTP Entrypoint
       - --entrypoints.web.address=:80
-      # Global HTTP to HTTPS redirection
-      #- --entrypoints.web.http.redirections.entrypoint.to=websecure
-      #- --entrypoints.web.http.redirections.entrypoint.scheme=https
+
       # HTTPS Entrypoint
       - --entrypoints.websecure.address=:443
 
@@ -33,8 +31,12 @@ services:
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
 
-      #- --entrypoints.web.forwardedHeaders.trustedIPs=10.0.0.0/8
-      #- --entrypoints.websecure.forwardedHeaders.trustedIPs=10.0.0.0/8
+      # Global HTTP to HTTPS redirection
+      #- --entrypoints.web.http.redirections.entrypoint.to=websecure
+      #- --entrypoints.web.http.redirections.entrypoint.scheme=https
+
+    read_only: true
+
     ports:
       - "80:80"
       - "443:443"
@@ -112,5 +114,5 @@ networks:
 # Define the volume for OpenWebUI data
 volumes:
   openwebui-data:
-    driver: local # Or specify another driver if needed
+    driver: local
 
