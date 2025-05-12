@@ -50,6 +50,8 @@ services:
     container_name: openwebui
     environment:
       - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
+      # --- If using ollama container set to this ---
+      #- OLLAMA_API_BASE_URL=http://ollama:11434
     volumes:
       - openwebui-data:/app/backend/data
     labels:
@@ -67,7 +69,7 @@ services:
       - "traefik.http.routers.openwebui-http.rule=Host(`llm.gdsolutions.at`)"
       - "traefik.http.routers.openwebui-http.entrypoints=web"
       - "traefik.http.routers.openwebui-http.middlewares=redirect-to-https"
-      - "traefik.http.routers.openwebui-http.service=openwebui-svc" 
+      - "traefik.http.routers.openwebui-http.service=openwebui-svc"
 
       # --- HTTP Router for internal address(for mac-mini.jesterbox.lan) ---
       - "traefik.http.routers.openwebui-internal.rule=Host(`mac-mini.jesterbox.lan`)"
@@ -84,6 +86,18 @@ services:
     restart: unless-stopped
     depends_on:
       - traefik
+    networks:
+      - traefik-network
+
+    # --- on MacOS X with silicone Chips this works with CPU only, use native ollama ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    profiles:
+      - donotstart
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
     networks:
       - traefik-network
 
