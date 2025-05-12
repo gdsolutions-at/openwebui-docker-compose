@@ -45,6 +45,9 @@ services:
     networks:
       - traefik-network
 
+    #- -- Recommended security setting for traefik --
+    read_only: true
+
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: openwebui
