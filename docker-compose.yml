@@ -8,15 +8,20 @@ services:
   traefik:
     image: traefik:v3.0
     container_name: traefik
+    environment:
+      - TZ=Europe/Vienna
     command:
       - --api.dashboard=true
       - --api.insecure=true
 
-      - --log.level=DEBUG
+      - --log.level=INFO
       - --accesslog=true
+      - --accesslog.fields.names.StartUTC=drop
 
       - --providers.docker.network=traefik-network
       - --providers.docker.exposedByDefault=false # Good security practice
+      - --providers.docker.watch=true
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
 
       # --- Entrypoints ---
       # HTTP Entrypoint
@@ -34,6 +39,10 @@ services:
       # Global HTTP to HTTPS redirection
       #- --entrypoints.web.http.redirections.entrypoint.to=websecure
       #- --entrypoints.web.http.redirections.entrypoint.scheme=https
+
+      # -- Set internal networks to trusted ips --
+      - --entrypoints.web.forwardedHeaders.trustedIPs=192.168.165.1
+      - --entrypoints.websecure.forwardedHeaders.trustedIPs=192.168.165.1
 
     read_only: true
 
@@ -55,8 +64,8 @@ services:
     container_name: openwebui
     environment:
       - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
-      # --- If using ollama container set to this ---
-      #- OLLAMA_API_BASE_URL=http://ollama:11434
+      #- OLLAMA_API_BASE_URL=http://192.168.83.5:11434
+      - TZ=Europe/Vienna
     volumes:
       - openwebui-data:/app/backend/data
     labels:
